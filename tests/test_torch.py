@@ -70,7 +70,7 @@ def test_siglayer_forward(depth, stream):
 
 def test_siglayer_training(jit_compile):
     assert keras.backend.backend() == BACKEND
-    batch_size, time_steps, features = 320, 10, 8
+    batch_size, time_steps, features = 325, 10, 8
     output_len = 5
 
     model = keras.Sequential([

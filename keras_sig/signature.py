@@ -26,7 +26,7 @@ def signature(
     depth: int,
     stream: bool = False,
     unroll:Optional[Union[bool, int]] = None,
-) -> list[Array] | Array:
+) -> Array:
     """
     Compute the signature of a path. Automatically dispatches to vmap or not based on the shape of `path`.
 
@@ -69,7 +69,7 @@ def _single_signature(
     depth: int,
     stream: bool = False,
     unroll: Optional[Union[bool, int]] = False,
-) -> list[Array] | Array:
+) -> Array:
     """
     Compute the signature of a path. Optionally, divide the path into chunks to compute signatures
     and combine them using Chen's identity (useful for long paths).
@@ -115,7 +115,7 @@ def _batch_signature(
     depth: int,
     stream: bool = False,
     unroll: Optional[Union[bool, int]] = None,
-) -> List[Array] | Array:
+) -> Array:
     """
     Compute the signature of a path matching original implementation exactly.
     """
@@ -165,7 +165,7 @@ def _tf_single_signature(
     path,
     depth: int,
     stream: bool = False,
-) -> list[Array] | Array:
+) -> Array:
     """
     Compute the signature of a path. Optionally, divide the path into chunks to compute signatures
     and combine them using Chen's identity (useful for long paths).
@@ -209,7 +209,7 @@ def _tf_batch_signature(
     path,
     depth: int,
     stream: bool = False,
-) -> list[Array] | Array:
+) -> Array:
     """
     Compute the signature of a path. Optionally, divide the path into chunks to compute signatures
     and combine them using Chen's identity (useful for long paths).
