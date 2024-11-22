@@ -106,18 +106,18 @@ If using this package, please cite both this work and the foundational packages 
   year={2021}
 }
 
-@software{signax2023github,
+@software{signax2024github,
   author = {Anh Tong},
   title = {signax: Path Signatures in JAX},
   url = {https://github.com/anh-tong/signax},
-  year = {2023},
+  year = {2024},
 }
 
-@misc{genet2023iisignaturetf2,
+@software{genet2024iisignaturetf2,
   author = {Remi Genet, Hugo Inzirillo},
   title = {iisignature-tensorflow-2: TensorFlow 2 Wrapper for iisignature},
   url = {https://github.com/remigenet/iisignature-tensorflow-2},
-  year = {2023},
+  year = {2024},
 }
 ```
 
