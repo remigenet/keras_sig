@@ -15,7 +15,14 @@ elif backend == 'torch':
 from keras_sig.tensor_ops import restricted_exp, mult_fused_restricted_exp, batch_restricted_exp, batch_mult_fused_restricted_exp
 
 def get_largest_divisor_under_20(n: int) -> int:
-    """Get largest divisor under 20 for scan unrolling"""
+    """Gets largest divisor under or equal to 20 for scan unrolling optimization.
+
+    Args:
+        n: Integer to find divisor for
+        
+    Returns:
+        Largest integer i ≤ 20 that divides n. Returns 10 if no such divisor exists.
+    """
     for i in range(20, 0, -1):
         if i <= n and n % i == 0:
             return i
@@ -27,27 +34,26 @@ def signature(
     stream: bool = False,
     unroll:Optional[Union[bool, int]] = None,
 ) -> Array:
-    """
-    Compute the signature of a path. Automatically dispatches to vmap or not based on the shape of `path`.
-
+    """Computes the signature of a path with automatic dispatch to batched/non-batched variants.
+    
     Args:
-        path: size (length, dim) or (batch, length, dim)
-        depth: signature is truncated at this depth
-        stream: whether to handle `path` as a stream. Default is False
-        flatten: whether to flatten the output. Default is False
-        num_chunks: number of chunks to use. Default is 1. If > 1, path will be divided into
-        chunks to compute signatures. Then, obtained signatures are combined (using Chen's identity).
+        path: Array of shape (length, dim) or (batch, length, dim)
+        depth: Maximum depth to truncate signature computation
+        stream: If True, computed signatures is returned for each steps. Default False
+        unroll: Level of unrolling for scan operations. If None, automatically determined. 
+               If False, no unrolling.
 
     Returns:
-        If `stream` is `True`, this will return a list of `Array` in a form
-            [(path_len - 1, dim), (path_len - 1, dim, dim), (path_len - 1, dim, dim, dim), ...]
-        If `stream` is `False`, this will return a list of `Array` in a form
-            [(dim, ), (dim, dim), (dim, dim, dim), ...]
-        If `flatten` is `True`, this will return a flattened array of shape
-            (dim + dim**2 + ... + dim**depth, )
-        If your path is of shape (batch, path_len, dim), all of the above will have an extra
-        dimension of size `batch` as the first dimension.
+        If path shape is (length, dim):
+            If stream=False: Array of shape (dim + dim² + ... + dim^depth,)
+            If stream=True: Array of shape (length-1, dim + dim² + ... + dim^depth)
+            
+        If path shape is (batch, length, dim):
+            If stream=False: Array of shape (batch, dim + dim² + ... + dim^depth)
+            If stream=True: Array of shape (batch, length-1, dim + dim² + ... + dim^depth)
 
+    Raises:
+        ValueError: If path does not have shape (length, dim) or (batch, length, dim)
     """
 
     # this is just to handle shape errors
@@ -70,19 +76,17 @@ def _single_signature(
     stream: bool = False,
     unroll: Optional[Union[bool, int]] = False,
 ) -> Array:
-    """
-    Compute the signature of a path. Optionally, divide the path into chunks to compute signatures
-    and combine them using Chen's identity (useful for long paths).
-
+    """Computes signature for single (non-batched) path.
+    
     Args:
-        path: size (length, dim)
-        depth: signature is truncated at this depth
-        stream: whether to handle `path` as a stream. Default is False
-
-        If `stream` is `True`, this will return an array of form
-            (path_len - 1, sum(dim**i for i in range depth))
-        If `stream` is `False`, this will return an array in a form
-            (sum(dim**i for i in range depth))
+        path: Array of shape (length, dim)
+        depth: Maximum depth to truncate signature computation
+        stream: If True, computed signatures is returned for each steps. Default False ## NOT IMPLEMENTED
+        unroll: Level of unrolling for scan operations
+        
+    Returns:
+        If stream=False: Array of shape (dim + dim² + ... + dim^depth,)
+        If stream=True: Array of shape (length-1, dim + dim² + ... + dim^depth)
     """
     path_increments = path[1:,:] - path[:-1,:]
     exp_term = restricted_exp(path_increments[0], depth=depth)
@@ -116,8 +120,17 @@ def _batch_signature(
     stream: bool = False,
     unroll: Optional[Union[bool, int]] = None,
 ) -> Array:
-    """
-    Compute the signature of a path matching original implementation exactly.
+    """Computes signatures for batched paths using scan operations.
+    
+    Args:
+        path: Array of shape (batch, length, dim)
+        depth: Maximum depth to truncate signature computation  
+        stream: If True, computed signatures is returned for each steps. Default False
+        unroll: Level of unrolling for scan operations. If None, uses largest divisor under 20
+        
+    Returns:
+        If stream=False: Array of shape (batch, dim + dim² + ... + dim^depth)
+        If stream=True: Array of shape (batch, length-1, dim + dim² + ... + dim^depth)
     """
     batch_size, seq_len, n_features = path.shape
     path_increments = path[:, 1:] - path[:, :-1]
@@ -166,19 +179,18 @@ def _tf_single_signature(
     depth: int,
     stream: bool = False,
 ) -> Array:
-    """
-    Compute the signature of a path. Optionally, divide the path into chunks to compute signatures
-    and combine them using Chen's identity (useful for long paths).
-
+    """TensorFlow-specific signature computation for single (non-batched) path.
+    
+    Implementation without using scan operations.
+    
     Args:
-        path: size (length, dim)
-        depth: signature is truncated at this depth
-        stream: whether to handle `path` as a stream. Default is False
-
-        If `stream` is `True`, this will return an array of form
-            (path_len - 1, sum(dim**i for i in range depth))
-        If `stream` is `False`, this will return an array in a form
-            (sum(dim**i for i in range depth))
+        path: Array of shape (length, dim)
+        depth: Maximum depth to truncate signature computation
+        stream: If True, computed signatures is returned for each steps.
+        
+    Returns:
+        If stream=False: Array of shape (dim + dim² + ... + dim^depth,)
+        If stream=True: Array of shape (length-1, dim + dim² + ... + dim^depth)
     """
     path_increments = path[1:,:] - path[:-1,:]
     exp_term = restricted_exp(path_increments[0], depth=depth)
@@ -210,19 +222,18 @@ def _tf_batch_signature(
     depth: int,
     stream: bool = False,
 ) -> Array:
-    """
-    Compute the signature of a path. Optionally, divide the path into chunks to compute signatures
-    and combine them using Chen's identity (useful for long paths).
-
+    """TensorFlow-specific signature computation for batched paths.
+    
+    Implementation without using scan operations.
+    
     Args:
-        path: size (length, dim)
-        depth: signature is truncated at this depth
-        stream: whether to handle `path` as a stream. Default is False
-
-        If `stream` is `True`, this will return an array of form
-            (path_len - 1, sum(dim**i for i in range depth))
-        If `stream` is `False`, this will return an array in a form
-            (sum(dim**i for i in range depth))
+        path: Array of shape (batch, length, dim) 
+        depth: Maximum depth to truncate signature computation
+        stream: If True, computed signatures is returned for each steps.
+        
+    Returns:
+        If stream=False: Array of shape (batch, dim + dim² + ... + dim^depth)
+        If stream=True: Array of shape (batch, length-1, dim + dim² + ... + dim^depth)
     """
     batch_size = tf.shape(path)[0]
     n_features = tf.shape(path)[2]

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "keras_sig" 
-version = "0.1.0" 
+version = "0.1.2" 
 description = "Path Signature in Pure Keras"
 authors = [ "Rémi Genet", "Hugo Inzirillo"]  
 readme = "README.md"  
@@ -22,6 +22,7 @@ tensorflow = "^2.15.0"
 torch = "^2.0.0"
 jax = "^0.4.13"
 jaxlib = "^0.4.13"
+signax = "^0.2.1"
 
 [tool.pytest.ini_options]
 addopts = "-v"

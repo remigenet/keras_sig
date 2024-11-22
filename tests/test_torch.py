@@ -12,47 +12,92 @@ from keras.models import Model, load_model
 from keras_sig import SigLayer
 from keras.layers import Dense, Input
 
+import signax
+import numpy as np
+
 
 def generate_random_tensor(shape):
-    return random.normal(shape=shape, dtype=backend.floatx())
+    """Generates random tensor for testing.
+    
+    Creates normally distributed random array using numpy's random generator
+    
+    Args:
+        shape: Tuple defining the shape of the tensor to generate
+        
+    Returns:
+        Array: Random tensor of specified shape
+    """
+    return np.random.randn(*shape)
 
 @pytest.fixture(params=[2, 3, 4])  # Test different signature depths
 def depth(request):
-    """Fixture providing different signature computation depths.
+    """Fixture providing different signature depths for testing.
+    
+    Parametrizes tests with signature depths of 2, 3, and 4 to ensure 
+    the signature computation works correctly at different truncation levels.
     
     Args:
         request: pytest request object containing the parameter value
     
     Returns:
-        int: The signature computation depth to test with
+        int: Signature computation depth (2, 3, or 4)
     """
     return request.param
 
 @pytest.fixture(params=[False, True])  # Test different signature depths
 def stream(request):
-    """Fixture providing different signature computation depths.
+    """Fixture for testing streaming vs non-streaming signature computation.
+    
+    Parametrizes tests to run with both streaming and non-streaming modes 
+    to verify both computational approaches work correctly.
     
     Args:
         request: pytest request object containing the parameter value
     
     Returns:
-        int: The signature computation depth to test with
+        bool: If True, compute streaming signatures; if False, compute terminal signatures
     """
     return request.param
 
 @pytest.fixture(params=[True, False])  # Test different signature depths
 def jit_compile(request):
-    """Fixture providing different signature computation depths.
+    """Fixture for testing JIT compilation settings.
+    
+    Parametrizes tests to run with and without JIT compilation to ensure 
+    the layer works correctly under both execution modes.
     
     Args:
         request: pytest request object containing the parameter value
     
     Returns:
-        int: The signature computation depth to test with
+        bool: If True, enable JIT compilation; if False, use standard execution
     """
     return request.param
 
 def test_siglayer_forward(depth, stream):
+    """Tests forward pass of SigLayer against signax reference implementation.
+    
+    Verifies that:
+    1. SigLayer produces output tensors of correct shape
+    2. Shape calculations properly account for streaming vs non-streaming modes
+    3. Backend is correctly set to JAX
+    4. Output values match signax's signature computation within tolerance
+    
+    Args:
+        depth: Signature computation depth from fixture
+        stream: Streaming mode flag from fixture
+    
+    The test:
+    - Creates random input sequences
+    - Computes signatures using both SigLayer and signax
+    - Verifies shape correctness
+    - Compares outputs element-wise with 1e-3 tolerance
+    
+    Raises:
+        AssertionError: If output shape doesn't match expected shape,
+                       backend is incorrect, or if outputs differ 
+                       from signax by more than tolerance
+    """
     assert keras.backend.backend() == BACKEND
     batch_size, time_steps, features = 32, 10, 5
     
@@ -67,8 +112,27 @@ def test_siglayer_forward(depth, stream):
         target_output_shape = (batch_size, sum([features ** i for i in range(1, depth + 1)]))
     assert output_signature.shape == target_output_shape, f"Expected shape {target_output_shape}, but got {output_signature.shape}"
 
+    signax_sig = signax.signature(input_sequence, depth=depth, stream=stream)
+    if keras.backend.backend() == 'torch':
+        output_signature = output_signature.detach().numpy()
+    assert ops.max(ops.abs(output_signature - signax_sig)) < 1e-3, "Output should match signax signature"
+
 
 def test_siglayer_training(jit_compile):
+    """Tests SigLayer in training configuration with different compilation modes.
+    
+    Verifies that:
+    1. SigLayer can be integrated into a Keras model
+    2. Model successfully trains with SigLayer
+    3. Loss is properly tracked during training
+    4. Works with both JIT and non-JIT compilation
+    
+    Args:
+        jit_compile: JIT compilation flag from fixture
+    
+    Raises:
+        AssertionError: If model fails to train or loss history is missing
+    """
     assert keras.backend.backend() == BACKEND
     batch_size, time_steps, features = 325, 10, 8
     output_len = 5
@@ -88,6 +152,17 @@ def test_siglayer_training(jit_compile):
     assert 'loss' in history.history, "Model should train successfully"
 
 def test_siglayer_serialization_alone():
+    """Tests serialization and deserialization of standalone SigLayer.
+    
+    Verifies that:
+    1. SigLayer can be converted to config
+    2. SigLayer can be reconstructed from config
+    3. Reconstructed layer maintains original parameters
+    4. Backend is correctly set
+    
+    Raises:
+        AssertionError: If serialization/deserialization fails or parameters don't match
+    """
     assert keras.backend.backend() == BACKEND
     depth = 3
     sig_layer = SigLayer(depth=depth)
@@ -97,6 +172,24 @@ def test_siglayer_serialization_alone():
     assert sig_layer.depth == sig_layer_reconstructed.depth, "Depth should be the same after serialization"
 
 def test_siglayer_serialization_in_model():
+    """Tests end-to-end serialization of model containing SigLayer.
+    
+    Verifies that:
+    1. Model with SigLayer can be saved and loaded
+    2. Predictions remain consistent after loading
+    3. Loaded model can continue training
+    4. Backend is correctly set
+    
+    The test:
+    - Creates a model with SigLayer
+    - Trains it briefly
+    - Saves and loads the model
+    - Verifies predictions match
+    - Continues training loaded model
+    
+    Raises:
+        AssertionError: If model serialization fails or predictions don't match
+    """
     assert keras.backend.backend() == BACKEND
     batch_size, time_steps, features = 32, 10, 8
     units = 16

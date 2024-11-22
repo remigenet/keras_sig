@@ -13,13 +13,14 @@ elif backend == 'torch':
 
 
 def otimes(x: Array, y: Array) -> Array:
-    """Tensor product
-
+    """Computes the tensor product of two arrays.
+    
     Args:
-        x: size=(n,n,...,n), ndim=ndim_x
-        y: size=(n,n,...,n), ndim=ndim_y
-    Return:
-        Tensor size (n,n,...,n) with ndim=ndim_x + ndim_y
+        x: Array of shape (n,n,...,n) with ndim=ndim_x
+        y: Array of shape (n,n,...,n) with ndim=ndim_y
+        
+    Returns:
+        Array of shape (n,n,...,n) with ndim=ndim_x + ndim_y
     """
     xdim = x.ndim
     ydim = y.ndim
@@ -55,14 +56,18 @@ def restricted_exp(input: Array, depth: int) -> list[Array]:
 
 
 def mult_fused_restricted_exp(z: Array, A: list[Array]) -> list[Array]:
-    """
-    Multiply-fused-exponentiate
-
+    """Computes restricted exponential up to specified depth.
+    
     Args:
-        z: shape (n,)
-        A: a list of `jnp.array` [(n, ), (n x n), (n x n x n), ...]
-    Return:
-        A list of which elements have the same shape with `A`
+        input: Array of shape (n,)
+        depth: Maximum depth of the expansion
+        
+    Returns:
+        List of arrays [input, (input⊗input)/2, (input⊗input⊗input)/6, ...] 
+        up to depth terms
+    
+    Note:
+        depth is fixed to allow JIT compilation
     """
     depth = len(A)
     ret = []
@@ -76,13 +81,15 @@ def mult_fused_restricted_exp(z: Array, A: list[Array]) -> list[Array]:
     return ret
 
 def batch_otimes(x: Array, y: Array) -> Array:
-    """Tensor product
-
+    """Computes batched tensor product of two arrays.
+    
     Args:
-        x: size=(n,n,...,n), ndim=ndim_x
-        y: size=(n,n,...,n), ndim=ndim_y
-    Return:
-        Tensor size (n,n,...,n) with ndim=ndim_x + ndim_y
+        x: Array of shape (batch,...) with ndim=ndim_x 
+        y: Array of shape (batch,...) with ndim=ndim_y
+        
+    Returns:
+        Array of shape (batch,...) with ndim=ndim_x + ndim_y - 1
+        where batch dimension is preserved
     """
     xdim = x.ndim
     ydim = y.ndim
@@ -93,15 +100,18 @@ def batch_otimes(x: Array, y: Array) -> Array:
     return x * y
     
 def batch_restricted_exp(input: Array, depth: int) -> list[Array]:
-    """Restricted exponentiate
-
-    As `depth` is fixed so we can make it as a static argument.
-    This allows us to `jit` this function
+    """Computes batched restricted exponential up to specified depth.
+    
     Args:
-        input: shape (n, )
-        depth: the depth of signature
-    Return:
-        A list of `jnp.ndarray` contains tensors
+        input: Array of shape (batch,n)
+        depth: Maximum depth of the expansion
+        
+    Returns:
+        List of arrays [input, (input⊗input)/2, (input⊗input⊗input)/6, ...]
+        up to depth terms, preserving batch dimension
+    
+    Note:
+        depth is fixed to allow JIT compilation
     """
     ret = [input]
     for i in range(2, depth + 1):
@@ -109,14 +119,15 @@ def batch_restricted_exp(input: Array, depth: int) -> list[Array]:
     return ret
 
 def batch_mult_fused_restricted_exp(z: Array, A: list[Array]) -> list[Array]:
-    """
-    Multiply-fused-exponentiate
-
+    """Computes batched multiply-fused exponential operation.
+    
     Args:
-        z: shape (n,)
-        A: a list of `jnp.array` [(n, ), (n x n), (n x n x n), ...]
-    Return:
-        A list of which elements have the same shape with `A`
+        z: Array of shape (batch,n)
+        A: List of arrays with shapes [(batch,n), (batch,n,n), (batch,n,n,n), ...]
+        
+    Returns:
+        List of arrays with same shapes as input A containing the
+        batched multiply-fused exponential results
     """
     depth = len(A)
     ret = []
@@ -130,8 +141,17 @@ def batch_mult_fused_restricted_exp(z: Array, A: list[Array]) -> list[Array]:
     return ret
 
 def batch_addcmul(x: Array, y: Array, z: Array) -> Array:
-    """Similar to `torch.addcmul` returning
-        x + y * z
-    Here `*` is the tensor product
+    """Computes x + (y ⊗ z) where ⊗ is the batched tensor product.
+    
+    Similar to torch.addcmul but uses batched tensor product instead of 
+    elementwise multiplication.
+    
+    Args:
+        x: Array compatible with the result of y ⊗ z
+        y: Input array for batched tensor product
+        z: Input array for batched tensor product
+        
+    Returns:
+        The sum of x and the batched tensor product of y and z
     """
     return x + batch_otimes(y, z)
