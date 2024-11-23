@@ -1,10 +1,10 @@
 import os
 import subprocess
 
-def run_test(backend):
-    env = os.environ.copy()
-    env['KERAS_BACKEND'] = backend
-    result = subprocess.run(['pytest', f'tests/test_{backend}.py'], env=env, capture_output=True, text=True)
+# This is needed to run each test in separate processes as the keras backend cannot be changed while set in a process
+
+def run_test(file):
+    result = subprocess.run(['pytest', f'tests/test_{backend}.py'], capture_output=True, text=True)
     print(f"\n--- {backend.upper()} Backend Test Results ---")
     print(result.stdout)
     if result.stderr:
@@ -13,7 +13,7 @@ def run_test(backend):
     return result.returncode
 
 if __name__ == "__main__":
-    backends = ['tensorflow', 'torch', 'jax']
+    backends = ['tensorflow', 'torch', 'jax', 'quick_sig']
     exit_codes = []
 
     for backend in backends:

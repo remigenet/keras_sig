@@ -1,6 +1,8 @@
-# keras_sig: Easy Path Signature in Keras 
+# keras_sig: The most Efficient and Easy Path Signature computation 
 
-A backend-agnostic Keras implementation of path signature computations, focusing on simplicity and ease of integration.
+This package started as backend-agnostic Keras implementation of path signature computations, focusing on simplicity and ease of integration.
+Since we proposed a GPU-optimized computation methods that leverages fully parallel operations, it has become the fastest and most efficient path signature computation package available at date. This method is available either in full Keras for model training, but also as a standalone JAX function for direct computation.
+
 
 ## Overview
 
@@ -10,16 +12,17 @@ A backend-agnostic Keras implementation of path signature computations, focusing
 - Simple integration within Keras models
 - Pure Python implementation avoiding C++ dependencies
 - Consistent API across different backends
+- GPU-optimized computation for faster training
 
 The package builds upon several key projects in the signature computation ecosystem:
 
 ### Historical Context
 
-1. **iisignature** ([repo](https://github.com/bottler/iisignature/)): The foundational C++ implementation providing highly optimized signature computations
-2. **signatory** ([repo](https://github.com/patrick-kidger/signatory)): A PyTorch-specific implementation using C++ level optimizations
+1. **iisignature** ([repo](https://github.com/bottler/iisignature/)): The foundational C++ implementation providing highly optimized signature computations with a python wrapper
+2. **signatory** ([repo](https://github.com/patrick-kidger/signatory)): A PyTorch-specific implementation using C++ level optimizations for GPU acceleration
 3. **iisignature-tensorflow-2** ([repo](https://github.com/remigenet/iisignature-tensorflow-2/)): An attempt at wrapping iisignature for TensorFlow 2, which faced limitations with model compilation
 4. **signax** ([repo](https://github.com/anh-tong/signax)): A breakthrough pure JAX implementation showing that C++ optimization could be avoided
-5. **keras_sig** (this package): Bringing the pure Python approach to all Keras backends
+5. **keras_sig** (this package): Bringing the pure Python approach to all Keras backends and optimizing further the computation for the GPU.
 
 ## Installation
 
@@ -36,40 +39,134 @@ pip install -e .
 
 ## Quick Start
 
+Basic usage with Keras:
 ```python
 import keras
 from keras_sig import SigLayer
 
-# Create a model with signature computation
 model = keras.Sequential([
     keras.layers.Input(shape=(timesteps, features)),
-    SigLayer(depth=3, stream=False),
+    SigLayer(depth=3, stream=False, gpu_optimized=True),  # Enable GPU optimization
     keras.layers.Dense(output_dim)
 ])
-
-# Use it like any other Keras layer
-model.compile(optimizer='adam', loss='mse')
-model.fit(x_train, y_train, epochs=10)
 ```
 
-## Performance Considerations
+Direct JAX computation (fastest option):
+```python
+from keras_sig import jax_gpu_signature
 
-### Backend-Specific Performance
+# Pre-compiled GPU-optimized computation
+signatures = jax_gpu_signature(paths, depth=3, stream=False)
+```
 
-- **JAX**: Best performance and most stable for compilation
-- **PyTorch**: Good performance at simple forward pass, compilation often fails but works fine without (but is much slower than JAX)
-- **TensorFlow**: Bad performance at simple forward pass, but is able to compile and run with JIT (so will ran quicker than torch, but slower than JAX) - main issue is that due to the non-ability to use keras.ops.scan in tensorflow the loop unrolling is not handled directly and for long sequence the compilation can be very problematic. For long sequence go to jax..
+## Performance & Implementation Options
 
-For raw forward pass computation:
-- Faster than iisignature for big batch/sequence sizes, a bit slower for small sizes
-- Slower than signax (due to signax's pure JAX JIT compilation and possible use of GPU, while keras only compile at train time), but similar to it when it is at train time
+### Computation Methods
 
-### Training Performance
+1. **GPU-Optimized** (Recommended when GPU available)
+   - Uses parallel operations instead of loops
+   - 5x faster than standard implementation
+   - Higher memory usage
+   - Enable with `gpu_optimized=True` or use `jax_gpu_signature`
+   
+2. **Standard Implementation**
+   - Loop-based computation with scan operations
+   - Lower memory footprint
+   - Better for CPU-only systems
+   - Default when GPU unavailable
 
-When integrated in training loops:
-- Comparable efficiency to signax in JAX with compatibility with all backend
-- JIT compilation available during training
-- Seamless integration with Keras training features
+### Performance Benchmarks
+
+All benchmarks run on AMD EPYC-7302P 16-cores with RTX-3090.
+
+#### Forward Pass (128 batch, 100 sequence, 5 features, depth 4)
+
+| Backend | Version | GPU Time | CPU Time |
+|---------|---------|----------|-----------|
+| JAX | Pure Jax-GPU function | 163µs | 46.5ms |
+| JAX | keras Standard | 713ms | 378ms |
+| JAX | keras GPU-optimized | - | 80.5ms |
+| JAX | signax | 668µs | 11.7ms |
+| TensorFlow | keras GPU-optimized | 55.2ms | 180ms |
+| TensorFlow | keras Standard | 375ms | 317ms |
+| Torch | keras GPU-optimized | 2.84ms | 50.6ms |
+| Torch | keras Standard | 92.4ms | 91.4ms |
+| None | iisignature | 36.4ms | 36.4ms |
+
+Here the Keras version are not performing optimally as direct Jax function because the keras operation are not runned on GPU nor compiled with jit. This phase is only happening at training time.
+However we can easily compare the performance of the Pure Jax function with signax and iisignature and see that our proposed approach is the fastest when a GPU is available.
+When no GPU is available, the standard version is very similar to the signax implementation.
+
+#### Training Performance
+
+Test conditions: We created a model following the [SigKAN paper](https://arxiv.org/abs/2406.17890) the following way
+```python
+model = keras.Sequential([
+    Input(shape=X.shape[1:]),
+    Dense(7),
+    SigDense(10, depth, SigLayer),
+    Flatten(),
+    Dense(10, 'relu'),
+    Dense(n_ahead),
+])
+```
+and trained it with jit_compilation enable when possible for 10 epochs with Adam optimizer on randomly generated datas.
+
+##### Long Sequences (length=500)
+| Backend | Version | Compile Time (GPU) | Compile Time (CPU) | Step Time (GPU) | Step Time (CPU) |
+|---------|---------|-------------------|-------------------|----------------|----------------|
+| JAX | GPU-opt | 5s | 25s | 2ms | 213ms |
+| JAX | Standard | 7s | 14s | 14ms | 108ms |
+| JAX | Signax | 6s | 12s | 14ms | 83ms |
+| TensorFlow | GPU-opt | 9s | 26s | 2ms | 214ms |
+| TensorFlow | Standard | Compile fail | Compile fail | - | - |
+| TensorFlow | iisignature | No compile | No compile | 340-345ms | 340-345ms |
+| Torch | GPU-opt | 53s | 26s | 21ms | 218ms |
+| Torch | Standard | No compile | No compile | 590ms | 643ms |
+
+##### Short Sequences (length=20)
+| Backend | Version | Compile Time (GPU) | Compile Time (CPU) | Step Time (GPU) | Step Time (CPU) |
+|---------|---------|-------------------|-------------------|----------------|----------------|
+| JAX | GPU-opt | 4s | 6s | 1ms | 19ms |
+| JAX | Standard | 8s | 8s | 1ms | 9ms |
+| JAX | signax | 5s | 4s | 2ms | 6ms |
+| TensorFlow | GPU-opt | 4s | 13s | 1ms | 102ms |
+| TensorFlow | Standard | 19s | 14s | 2ms | 28ms |
+| TensorFlow | iisignature | No compile | No compile | 27ms | 27ms |
+| Torch | GPU-opt | 9s | 8s | 21ms | 17ms |
+| Torch | Standard | No compile | No compile | 38ms | 31ms |
+
+
+
+Key Findings:
+1. Pure JAX GPU-optimized version is fastest for forward pass (4x faster than signax)
+2. GPU-optimized variants excel with GPU availability across all backends
+3. For training:
+   - JAX: Best balance of compilation/execution
+   - TensorFlow: GPU-optimized version required for long sequences
+   - PyTorch: Longer compilation but good runtime with GPU-optimization
+4. Standard implementations struggle with:
+   - PyTorch: Compilation issues
+   - TensorFlow: Long sequence compilation
+   - All backends: Slower execution without GPU optimization
+
+### Implementation Recommendations
+
+1. **JAX + GPU (Best Overall)**
+   - Use pure JAX implementation for forward pass
+   - Use GPU-optimized SigLayer for training
+
+2. **PyTorch + GPU**
+   - Use GPU-optimized version only
+   - Expect longer compilation times
+
+3. **TensorFlow + GPU**
+   - Use GPU-optimized version
+   - Avoid standard version for long sequences
+
+4. **CPU-Only Systems**
+   - JAX standard implementation offers best balance
+   - GPU-optimized versions still usable but with performance penalty
 
 ## Features
 

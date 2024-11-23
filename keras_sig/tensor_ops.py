@@ -98,6 +98,29 @@ def batch_otimes(x: Array, y: Array) -> Array:
     for i in range(xdim - 1):
         y = ops.expand_dims(y, axis=1)
     return x * y
+
+def batch_seq_otimes(x: Array, y: Array) -> Array:
+    """Computes batched tensor product optimized for GPU with sequence dimension.
+
+    A variant of batched tensor product that preserves both batch and sequence 
+    dimensions, enabling parallel computation across sequences. Optimized for 
+    GPU throughput by reducing loop iterations.
+
+    Args:
+        x: Array of shape (batch, seq, n, n, ..., n) with ndim=ndim_x
+        y: Array of shape (batch, seq, n, n, ..., n) with ndim=ndim_y
+        
+    Returns:
+        Array of shape (batch, seq, n, n, ..., n) with ndim=ndim_x + ndim_y - 2
+        preserving both batch and sequence dimensions
+    """
+    xdim = x.ndim
+    ydim = y.ndim
+    for i in range(ydim - 2):
+        x = ops.expand_dims(x, axis=-1)
+    for i in range(xdim - 2):
+        y = ops.expand_dims(y, axis=2)
+    return x * y
     
 def batch_restricted_exp(input: Array, depth: int) -> list[Array]:
     """Computes batched restricted exponential up to specified depth.
