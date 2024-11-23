@@ -73,69 +73,26 @@ def signature(
         gpu_optimized = has_gpu
     
     # this is just to handle shape errors
+    has_expand_dims = False
     if path.ndim == 2:
-        if backend == 'tensorflow':
-            return _tf_single_signature(path, depth=depth, stream=stream)
-        else:
-            return _single_signature(path, depth=depth, stream=stream, unroll=unroll)
-    if path.ndim == 3:  # batch case (mimics signatory)
-        if gpu_optimized:
-            # if not has_alert_useless_unroll and unroll is not None:
-            #     logger.warning("Unroll parameter is ignored when using GPU-optimized implementation as it uses parallel operations instead of scan")
-            #     has_alert_useless_unroll = True
-            return _batch_signature_gpu(path, depth=depth, stream=stream)
-        else:
-            if backend == 'tensorflow':
-                # if not has_alert_useless_unroll and unroll is not None:
-                #     logger.warning("Unroll parameter is ignored when using Tensorflow Backend as its compiler do not handle well the scan")
-                return _tf_batch_signature(path, depth=depth, stream=stream)
-            else:
-                return _batch_signature(path, depth=depth, stream=stream, unroll=unroll)
-    msg = f"Path must be of shape (path_length, path_dim) or (batch, path_length, path_dim), got {path.shape}"
-    raise ValueError(msg)
-
-def _single_signature(
-    path: Array,
-    depth: int,
-    stream: bool = False,
-    unroll: Optional[Union[bool, int]] = False,
-) -> Array:
-    """Computes signature for single (non-batched) path.
-    
-    Args:
-        path: Array of shape (length, dim)
-        depth: Maximum depth to truncate signature computation
-        stream: If True, computed signatures is returned for each steps. Default False ## NOT IMPLEMENTED
-        unroll: Level of unrolling for scan operations
+        path = ops.expand_dims(path, axis=0)
+        has_expand_dims = True
         
-    Returns:
-        If stream=False: Array of shape (dim + dim² + ... + dim^depth,)
-        If stream=True: Array of shape (length-1, dim + dim² + ... + dim^depth)
-    """
-    path_increments = path[1:,:] - path[:-1,:]
-    exp_term = restricted_exp(path_increments[0], depth=depth)
+    if path.ndim != 3:
+        msg = f"Path must be of shape (path_length, path_dim) or (batch, path_length, path_dim), got {path.shape}"
+        raise ValueError(msg)
 
-    carry = exp_term
-    if stream:
-        stacked =[carry]
-    for inc_idx in range(1, path_increments.shape[0]):
-        inc = path_increments[inc_idx]
-        carry = mult_fused_restricted_exp(inc, carry)
-        if stream:
-            stacked.append(carry)
-        
-    if stream:
-        res = ops.stack([
-            ops.concatenate([ops.reshape(c, (-1,)) for c in res])
-            for res in stacked
-        ], axis=0)
-
+    if gpu_optimized:
+        signature = _batch_signature_gpu(path, depth=depth, stream=stream) 
     else:
-        res = carry
-        # `res` has shape [(dim,), (dim, dim), ...]
-        res = ops.concatenate([ops.reshape(c, (-1,)) for c in res])
-           
-    return res
+        if backend == 'tensorflow':
+            signature = _tf_batch_signature(path, depth=depth, stream=stream)
+        else:
+            signature = _batch_signature(path, depth=depth, stream=stream, unroll=unroll)
+    if has_expand_dims:
+        signature = ops.squeeze(signature, axis=0)
+    return signature
+
 
 
 def _batch_signature(
@@ -157,7 +114,7 @@ def _batch_signature(
         If stream=True: Array of shape (batch, length-1, dim + dim² + ... + dim^depth)
     """
     batch_size, seq_len, n_features = path.shape
-    path_increments = path[:, 1:] - path[:, :-1]
+    path_increments = ops.diff(path, axis=1) # Shape: (batch, length-1, dim)
     exp_term = batch_restricted_exp(path_increments[:, 0], depth=depth)
     unroll_level = unroll if unroll is not None else get_largest_divisor_under_20(seq_len-1)
     
@@ -196,51 +153,6 @@ def _batch_signature(
         # Match original stacking and concatenation
         return ops.concatenate([ops.reshape(ops.moveaxis(r, 1, 0), (batch_size, seq_len-1, n_features**(1+idx))) for idx, r in enumerate(res)], axis=2)
 
-#Needed a tensorflow variant without scan 
-
-def _tf_single_signature(
-    path,
-    depth: int,
-    stream: bool = False,
-) -> Array:
-    """TensorFlow-specific signature computation for single (non-batched) path.
-    
-    Implementation without using scan operations.
-    
-    Args:
-        path: Array of shape (length, dim)
-        depth: Maximum depth to truncate signature computation
-        stream: If True, computed signatures is returned for each steps.
-        
-    Returns:
-        If stream=False: Array of shape (dim + dim² + ... + dim^depth,)
-        If stream=True: Array of shape (length-1, dim + dim² + ... + dim^depth)
-    """
-    path_increments = path[1:,:] - path[:-1,:]
-    exp_term = restricted_exp(path_increments[0], depth=depth)
-
-    carry = exp_term
-    if stream:
-        stacked =[carry]
-    for inc_idx in range(1, path_increments.shape[0]):
-        inc = path_increments[inc_idx]
-        carry = mult_fused_restricted_exp(inc, carry)
-        if stream:
-            stacked.append(carry)
-        
-    if stream:
-        res = ops.stack([
-            ops.concatenate([ops.reshape(c, (-1,)) for c in res])
-            for res in stacked
-        ], axis=0)
-
-    else:
-        res = carry
-        # `res` has shape [(dim,), (dim, dim), ...]
-        res = ops.concatenate([ops.reshape(c, (-1,)) for c in res])
-           
-    return res
-
 def _tf_batch_signature(
     path,
     depth: int,
@@ -261,7 +173,7 @@ def _tf_batch_signature(
     """
     batch_size = tf.shape(path)[0]
     n_features = tf.shape(path)[2]
-    path_increments = path[:,1:] - path[:,:-1]
+    path_increments = ops.diff(path, axis=1) # Shape: (batch, length-1, dim)
     exp_term = batch_restricted_exp(path_increments[:, 0], depth=depth)
     
     carry = exp_term
@@ -312,7 +224,7 @@ def _batch_signature_gpu(
     batch_size, seq_len, n_features = path.shape
     if batch_size is None: #For tensorflow
         batch_size=-1
-    path_increments = path[:, 1:] - path[:, :-1]
+    path_increments = ops.diff(path, axis=1) # Shape: (batch, seq_len-1, features)
 
     stacked = [ops.cumsum(path_increments, axis=1)]
 
