@@ -1,8 +1,7 @@
-# keras_sig: The most Efficient and Easy Path Signature computation 
+# keras_sig: Very Fast Path Signature Computation for Keras
 
 This package started as backend-agnostic Keras implementation of path signature computations, focusing on simplicity and ease of integration.
 Since we proposed a GPU-optimized computation methods that leverages fully parallel operations, it has become the fastest and most efficient path signature computation package available at date. This method is available either in full Keras for model training, but also as a standalone JAX function for direct computation.
-
 
 ## Overview
 
@@ -67,7 +66,7 @@ signatures = jax_gpu_signature(paths, depth=3, stream=False)
    - Uses parallel operations instead of loops
    - 5x faster than standard implementation
    - Higher memory usage
-   - Enable with `gpu_optimized=True` or use `jax_gpu_signature`
+   - Enable with `gpu_optimized=True` (automaticaly selected if GPU detected) or use `jax_gpu_signature`
    
 2. **Standard Implementation**
    - Loop-based computation with scan operations
