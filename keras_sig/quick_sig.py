@@ -56,10 +56,6 @@ def batch_signature_pure_jax(path: Array, depth: int, stream: bool = False) -> A
     - Uses cumsum for parallel sequence processing
     - Replaces sequential operations with parallel matrix ops
     - Fully JIT-compiled for maximum GPU utilization
-
-    Memory trade-off:
-    - Requires O(depth * batch * seq * features^depth) GPU memory
-    - Provides O(log n) speedup over sequential implementations
     """
     batch_size, seq_len, n_features = path.shape
     path_increments = path[:, 1:] - path[:, :-1]
