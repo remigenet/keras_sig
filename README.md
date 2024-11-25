@@ -1,7 +1,7 @@
-# keras_sig: Very Fast Path Signature Computation for Keras
+# keras_sig: Fast Path Signature Computation for Keras
 
 This package started as backend-agnostic Keras implementation of path signature computations, focusing on simplicity and ease of integration.
-Since we proposed a GPU-optimized computation methods that leverages fully parallel operations, it has become the fastest and most efficient path signature computation package available at date. This method is available either in full Keras for model training, but also as a standalone JAX function for direct computation.
+Since we proposed a GPU-optimized computation methods that leverages fully parallel operations. This method is available either in full Keras for model training, but also as a standalone JAX function for direct computation.
 
 ## Overview
 
@@ -63,9 +63,9 @@ signatures = jax_gpu_signature(paths, depth=3, stream=False)
 ### Computation Methods
 
 1. **GPU-Optimized** (Recommended when GPU available)
-   - Uses parallel operations instead of loops
+   - Uses matrix operations instead of loops
    - 5x faster than standard implementation
-   - Higher memory usage
+   - Higher memory usage 
    - Enable with `gpu_optimized=True` (automaticaly selected if GPU detected) or use `jax_gpu_signature`
    
 2. **Standard Implementation**
@@ -179,6 +179,18 @@ Not yet implemented (available in other packages):
 - Log signatures
 - Lyndon words
 - Other advanced signature computations
+
+## Note on the GPU Optimization method:
+
+To understand a bit more the GPU optimization method used, here is the difference with signax (and signatory which inspired it):
+
+- Signax compute the signature by computing at each time steps the mult_fused_exp operation using previous result. Thus it iterates in a loop over the time steps and compute the signature incrementally.
+- Our method compute each degree of the signature on the full sequence at once. In fact even if you need the value of the previous degree of the signature at the next time step to compute the next degree, you can simply compute degree one by one on the full sequence.
+
+Why is it faster on GPU only ?
+
+The main advantage of the GPU is it's ability to perform huge matrix multiplication in one pass. The signatory/signax method only multiplying smaller matrices do not leverage this fully in comparison.
+However, when it comes to CPU, the signax method is faster because it avoids the overhead of the huge matrix multiplication and the memory allocation that comes with it.
 
 ## Citations
 
