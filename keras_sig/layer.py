@@ -13,6 +13,7 @@ elif backend == 'torch':
     import torch
     Array = torch.Tensor
 
+@keras.utils.register_keras_serializable(name="SigLayer")
 class SigLayer(keras.layers.Layer):
     """A Keras layer that computes path signatures with optional GPU optimization.
 
@@ -92,3 +93,10 @@ class SigLayer(keras.layers.Layer):
             and the signature depth.
         """
         return self.signature_func(inputs)
+
+    def compute_output_shape(self, input_shape):
+        """Computes the output shape of the layer."""
+        if self.stream:
+            return input_shape[:-2] + (input_shape[-2] - 1, sum(input_shape[-1] ** i for i in range(1, self.depth + 1)))
+        else:
+            return input_shape[:-2] + (sum(input_shape[-1] ** i for i in range(1, self.depth + 1)),)

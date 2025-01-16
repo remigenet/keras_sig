@@ -1,0 +1,13 @@
+{
+    "cpu_info": "AMD Ryzen 9 5900X 12-Core Processor",
+    "tensorflow_version": "2.16.1",
+    "keras_sig_version": "1.0.2",
+    "gpu_available": true,
+    "gpu_devices": [
+        "/physical_device:GPU:0"
+    ],
+    "timestamp": "20250105_233934",
+    "system": "Linux",
+    "python_version": "3.11.0rc1",
+    "platform": "Linux-5.15.0-102-generic-x86_64-with-glibc2.35"
+}

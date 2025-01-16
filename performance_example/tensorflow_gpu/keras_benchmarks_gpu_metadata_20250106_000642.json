@@ -1,0 +1,15 @@
+{
+    "cpu_info": "AMD Ryzen 9 5900X 12-Core Processor",
+    "keras_backend": "tensorflow",
+    "keras_version": "3.0.5",
+    "keras_sig_version": "1.0.2",
+    "iisignature_version": "0.1.0",
+    "timestamp": "20250106_000642",
+    "system": "Linux",
+    "python_version": "3.11.0rc1",
+    "platform": "Linux-5.15.0-102-generic-x86_64-with-glibc2.35",
+    "batch_size": 128,
+    "n_feature": 20,
+    "n_ahead": 10,
+    "epochs": 10
+}

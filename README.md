@@ -1,6 +1,6 @@
-# keras_sig: Fast Path Signature Computation for Keras
+# Keras Sig: Efficient Path Signature Computation on GPU in Keras 3
 
-This package started as backend-agnostic Keras implementation of path signature computations, focusing on simplicity and ease of integration.
+This package started as backend-agnostic Keras implementation of path signature computations, focusing on simplicity and ease of integration. A [paper](https://arxiv.org/pdf/2501.08455) explaining the method is available.
 Since we proposed a GPU-optimized computation methods that leverages fully parallel operations. This method is available either in full Keras for model training, but also as a standalone JAX function for direct computation.
 
 ## Overview
@@ -77,6 +77,8 @@ signatures = jax_gpu_signature(paths, depth=3, stream=False)
 ### Performance Benchmarks
 
 All benchmarks run on AMD EPYC-7302P 16-cores with RTX-3090.
+More benchmarks are available in the paper, including signatory. 
+All the bellow results and paper results are available in the `performance_example` folder.
 
 #### Forward Pass (128 batch, 100 sequence, 5 features, depth 4)
 

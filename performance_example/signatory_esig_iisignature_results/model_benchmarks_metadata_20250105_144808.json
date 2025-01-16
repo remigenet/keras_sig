@@ -1,0 +1,14 @@
+{
+    "cpu_info": "AMD Ryzen 9 5900X 12-Core Processor",
+    "device_name": "NVIDIA GeForce RTX 4090",
+    "torch_version": "1.9.0",
+    "signatory_version": "1.2.6",
+    "timestamp": "20250105_144808",
+    "system": "Linux",
+    "python_version": "3.7.10",
+    "platform": "Linux-5.15.0-102-generic-x86_64-with-debian-buster-sid",
+    "batch_size": 128,
+    "n_feature": 20,
+    "n_ahead": 10,
+    "epochs": 10
+}
